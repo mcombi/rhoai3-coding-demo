@@ -5,10 +5,10 @@
 | Field | Value |
 |-------|-------|
 | Product | Migration Toolkit for Applications |
-| Product version | 8.2 |
+| Product version | 8.3 |
 | Baseline source | `docs/PLATFORM_BASELINE.md` |
 | Chapter or page title | Configuring and Using Red Hat Developer Lightspeed for MTA |
-| Source URL | https://docs.redhat.com/en/documentation/migration_toolkit_for_applications/8.2/html-single/configuring_and_using_red_hat_developer_lightspeed_for_mta/index |
+| Source URL | https://docs.redhat.com/en/documentation/migration_toolkit_for_applications/8.3/html-single/configuring_and_using_red_hat_developer_lightspeed_for_mta/index |
 | Documentation category | AI |
 | Capture date | 2026-07-06 |
 

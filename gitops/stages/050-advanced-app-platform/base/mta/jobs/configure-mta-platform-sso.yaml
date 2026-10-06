@@ -1,10 +1,10 @@
-# PostSync Job: federates the MTA Hub's built-in OIDC provider (MTA 8.2)
-# to the platform realm, per the Installing guide Ch 8.2/9.
+# PostSync Job: federates the MTA Hub's built-in OIDC provider (MTA 8.3)
+# to the platform realm, per the Installing guide Ch. 8/9.
 #
 # In the platform realm (identity component's RHBK) it ensures:
 #   - realm roles role.admin / role.architect / role.migrator /
 #     role.project-manager — the Hub dynamically expands these into MTA
-#     permissions (Ch 8.2);
+#     permissions (Hub roles ref);
 #   - role assignments: ai-admin -> role.admin, ai-developer -> role.architect
 #     (architect can create/modify applications, which the stage 080
 #     exercise needs);

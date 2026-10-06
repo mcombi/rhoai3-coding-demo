@@ -105,7 +105,7 @@ In order (each step dies non-zero on failure):
 Passing `--source` or `--target` restricts the engine to rules that carry
 a matching label. Rules **without** those labels are excluded
 (documented in MTA 7.1 rules development; silent in 8.1/8.2 docs;
-confirmed on an MTA 8.2 run 2026-07-27). The custom canary carries a
+confirmed on an MTA 8.2 run 2026-07-27 (verify on 8.3)). The custom canary carries a
 `konveyor.io/target=<t>` label for every configured target; adding a
 target to `migration.yaml` requires adding the label to
 `.hermes/planning/mta-rules/rhoai3-canary.yaml`, or the canary stops
@@ -155,7 +155,7 @@ legacy scan of the frozen source, a copy of M1, never a rescan.
 - Passing `--source` "to be more precise".
 - Running analyze with cwd inside `/projects/modernized` (Equinox dirs
   land in cwd; the script forces `MTA_RUN_CWD`).
-- Treating a kantra run as MTA 8.2: it is recorded, provisional, and
+- Treating a kantra run as MTA 8.3: it is recorded, provisional, and
   blocks admission until the pinned artifact runs.
 
 ## Verification

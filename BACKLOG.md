@@ -37,6 +37,15 @@ Not for production or business-critical workloads.
 - [ ] Confirm `agentic_steer_enabled: "true"` does not regress stage 080 runs
   (steering mode adds approval prompts that could block autonomous harness).
 
+**MTA 8.3 CLI gate (blocks `cli-pin-update`):**
+
+- [ ] **check-cli-8.3**: Download the MTA 8.3 CLI zip from [access.redhat.com](https://access.redhat.com/downloads/content/migration_toolkit_for_applications), measure its `sha256sum`, run `mta-cli analyze` against the Coolstore legacy source, and confirm:
+  - Binary version string matches `8.3.x`
+  - The `MTA-8.2.1-DEPENDENCIES-JSON-MARSHAL` defect (`--json-output` marshal failure) does NOT reproduce; or if it does, update `judge-analyzer-exit.py` `EXCEPTION_VERSION` accordingly
+  - Record the digest and artifact filename for `pins.json`, `Dockerfile`, and `scan-with-mta` script updates
+- [ ] Once confirmed, execute the `cli-pin-update` changes: `pins.json` sha256/artifact, `Dockerfile` `MTA_CLI_VERSION`, `judge-analyzer-exit.py` `EXCEPTION_VERSION` (remove exception if 8.3 is clean), `scan-with-mta*.sh`, `admission.py`, and test fixtures
+- [ ] Update the VS Code VSIX pin from `8.2.1` to `8.3.x` once `mta-vscode-extension` 8.3.x is published on [open-vsx.org](https://open-vsx.org/extension/redhat/mta-vscode-extension) (currently latest: 8.2.1)
+
 **Re-enable checklist (when MTA Agents reaches GA):**
 
 - [ ] Remove Developer Preview warning from Tackle CR comment and BACKLOG.
@@ -53,7 +62,7 @@ Local evidence: `tmp/reliability-evidence/` in that worktree. Not validated agai
 - [x] Integrated with `next/after-v28` (`c9ab129d`) and architect commit `ee7bc6d6`; qualification PASS on
   `5280670b` (118/118 + 14/14 suites under python3.9, repeatability 26/0, M-3 CONTROLS PASS, rehearsal 47 of 47
   across both modes, ADR-026 qualified on PostgreSQL 16). Evidence: worktree `tmp/reliability-evidence/qualification-5280670b/`.
-- [ ] MTA 8.2 fresh repeatability not run locally (host has 7.3); recorded findings are not a fresh execution.
+- [ ] MTA 8.3 fresh repeatability not run locally (host has 7.3); recorded findings are not a fresh execution.
 - [ ] Release (release agent): build ws-080 with the typed-repair jar, re-pin its digest (pins, run-defaults, both
   devfiles, RELEASE.md), apply the Stage 040 gateway headroom first and observe it, publish platform and golden,
   bounded preflight without an isolation campaign.
@@ -344,7 +353,7 @@ Published in `95ead23f` (commits `e8c13adb`, `efb59233`, `9b3e1b92`, `e974e863`)
 - [ ] **Republish with the F1–F3 review corrections** (committed as `b00585fd`, not in `95ead23f`). F1: M5 does not read `unresolved-resolutions.json`; resolution comes only from M4-bound parity receipts, per entry point and owed mode. F2: whether a plan is owed comes from pinned `loop.plan_semantics` and the admission seal; a missing, bare, list-less, duplicated, unsealed or re-bound plan blocks release; a declared legacy run and a valid empty admitted list pass. F3: the parity stage separates requested scope, execution and the verdict bound to this candidate and mode. Corrected reporting of the combined check: 93 executed checks and 2 skips; the replay proved equal derived plans, not two admitted native M2 runs.
 - [x] **Harness defect found on the v24 validation run (…-v25) M1, fixed in the golden.** The `require_args` audit check tokenized the whole compound command, so `… --write; echo "EXIT=$?"` gave `--write;` and the reviewer's audit refused a correct M1 (both `handoff_facts.py --write` and `kanban_attach.py --exec` had run); the reviewer then looped reading the ledger and the loop guard halted it (card blocked). `args_of_run` now reads the tokens of the exact command that runs the script; the plan-only refusal is unchanged. With the fix, that M1's own log audits green (read-only check). Not in golden `221de165`.
 - [ ] **WP6 live retirement is not measured.** Retire mode is authored on `19469a5d` and reverted on main by `915242c1`, so Argo CD cannot publish it before review. It removes the run's delivery PipelineRuns and pods, then `project-<run>` through its own finalizer, then `<run>-dev`, each ownership-checked by exact name. The tombstone names the kept repository. The admission policy `retired-migration-run-project` refuses recreation. Still required: one live retirement of a disposable run, and a security review of the cluster-wide delete grant `migration-run-retire-project`.
-- [ ] Report the MTA 8.2.1 dependency-JSON defect to Red Hat support or upstream Konveyor. Draft: `tmp/v24-preparation/wp5-rescan/UPSTREAM-BUG.md`. YAML-only output and `--mode source-only` were not chosen.
+- [ ] Report the MTA 8.2.1 dependency-JSON defect to Red Hat support or upstream Konveyor. Draft: `tmp/v24-preparation/wp5-rescan/UPSTREAM-BUG.md`. YAML-only output and `--mode source-only` were not chosen. (Status under MTA 8.3 CLI unknown — see `check-cli-8.3` gate item in the MTA Agents section.)
 
 ## v23 comparison baseline — assisted where noted
 

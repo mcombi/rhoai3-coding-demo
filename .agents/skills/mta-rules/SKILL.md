@@ -8,7 +8,7 @@ metadata:
   ocp-baseline: "repo"
   skill-group: "Application Modernization"
 description: >
-  Use when creating custom rules for MTA 8.2 analysis, including YAML rule
+  Use when creating custom rules for MTA 8.3 analysis, including YAML rule
   syntax, rule metadata (labels, categories, effort), provider conditions
   (java, builtin, go, csharp, python, nodejs), logical conditions, condition
   chaining, custom variables, rule actions, and rulesets. Do NOT use for CLI

@@ -36,7 +36,7 @@ The governing decisions:
 1. **The work list is the plan.** MTA mandatory incidents, JDK compiler diagnostics, failing tests, and runtime-parity mismatches, each with a file locus, clustered by file, in a fixed order. It is recomputed by tools after every change and never written by a model or a human.
 2. **A strict progress measure decides.** The tuple *(mandatory incidents, observed compile errors, failing tests)* must strictly decrease lexicographically with no new mandatory incident, **or** a typed gate/coverage outcome must retain the candidate unaccepted. The compile slot is an observed diagnostic count: javac reports one error at a time, so `[0,1,0]` cannot establish that only one defect remains. An issued compile diagnostic that disappears while the count stays the same is `VERIFICATION_PENDING` (`unproven-repair`), not ACCEPTED and not a spent attempt. Disappearance, a changed diagnostic id, or a moved line never earns ACCEPTED. A true count drop still accepts. Strict decrease plus the typed pending outcome is the termination argument.
 3. **AI proposes; tools decide.** A worker edits only the head cluster's write set. It never authors the list, the measure, the acceptance, or a decision. A cluster that fails the attempt threshold becomes a human's card and the loop stops until the human clears it (pilot rule: a deferral is never routed around).
-4. **Product tooling only, permissively licensed.** MTA CLI 8.2 (analysis), the pinned toolchain JDK's compiler API (structure and diagnostics), Maven and surefire (build and tests), Hermes v0.20.5 (cards), git (state), and one pinned execution component: OpenRewrite 8.89.0 (`rewrite-core`, `rewrite-java`, `rewrite-java-21`; Apache-2.0) inside the harness's typed repair executor, which applies this project's own two recipes to an issued unit (§7.3). It never produces M1/M2 evidence and never plans. No third-party analysis library, no recipe bundle (`rewrite-spring`, `rewrite-quarkus`, `rewrite-migrate-java`), no source-available or proprietary component, no regex extraction.
+4. **Product tooling only, permissively licensed.** MTA CLI 8.3 (analysis), the pinned toolchain JDK's compiler API (structure and diagnostics), Maven and surefire (build and tests), Hermes v0.20.5 (cards), git (state), and one pinned execution component: OpenRewrite 8.89.0 (`rewrite-core`, `rewrite-java`, `rewrite-java-21`; Apache-2.0) inside the harness's typed repair executor, which applies this project's own two recipes to an issued unit (§7.3). It never produces M1/M2 evidence and never plans. No third-party analysis library, no recipe bundle (`rewrite-spring`, `rewrite-quarkus`, `rewrite-migrate-java`), no source-available or proprietary component, no regex extraction.
 5. **The Spring-compatibility path first.** The deterministic bootstrap targets the Quarkus Spring compatibility extensions; the native path is the same loop with a second mapping catalog and one more work-list source (`org.springframework` imports), applied class by class as the Quarkus guidance recommends.
 6. **Specimen independence is required from the outset.** PetClinic is the current proving application. Every harness component must express a reusable capability or consume an evidence-bound application contract; a PetClinic repair must satisfy this boundary before it ships. Successful PetClinic migration is followed by validation on a new application, not by a deferred generalization rewrite. See §2.1.
 
@@ -50,7 +50,7 @@ Spec Kit, the typed partition, the ownership map, the capability DAG, the contex
 |---|---|---|
 | Red Hat Developer Hub | Self-service migration project creation | Platform-managed |
 | Red Hat OpenShift Dev Spaces | Per-run workspace with legacy read-only and destination writable | Platform-managed |
-| MTA CLI | Mandatory incidents on the frozen source and on the destination after every step; the canary rule proves the effective ruleset | `pins.mta_cli` **8.2** product line; measured binary version and sha256 recorded in every receipt; an Operator freezes `artifact_sha256` from a measured receipt; kantra is provisional and non-admissible |
+| MTA CLI | Mandatory incidents on the frozen source and on the destination after every step; the canary rule proves the effective ruleset | `pins.mta_cli` **8.3** product line; measured binary version and sha256 recorded in every receipt; an Operator freezes `artifact_sha256` from a measured receipt; kantra is provisional and non-admissible |
 | JDK compiler API (`javax.lang.model`, `com.sun.source`, `javax.tools`) | Structural inventory of the frozen source (`JdkModelExtract.java`) and compiler diagnostics of the destination (`JdkDiagnostics.java`) | `pins.structure_extractor` **jdk-21** = the toolchain JDK; the launcher refuses on a feature-release mismatch; no third-party library, no separate license |
 | OpenRewrite (typed repair executor, harness only) | Apply the two qualified typed repairs (§7.3) inside an issued write grant; never a dependency of the migrated application | `pins.typed_repair`: executor jar sha256 and build, rewrite 8.89.0 (Apache-2.0) and every shipped artifact with its POM license; baked at `/opt/rhoai3/typed-repair/typed-repair.jar` in ws-080 |
 | Maven + surefire | Offline build and tests of the destination | Compiler and surefire plugin pins; offline (`-o`) after the warm-up |
@@ -203,7 +203,7 @@ Fail-closed boundaries, each with a permanent negative test:
 | Block | Meaning |
 |---|---|
 | `TOOL_UNPINNED` / `TOOL_PIN_MISMATCH` | a mandatory producer (JDK model, MTA CLI) is not pinned, or its receipt disagrees with the pin on status, version, or digest |
-| `MTA_MISSING` / `MTA_PROVENANCE` / `CANARY_MISSING` / `INCIDENTS_NOT_CONSERVED` | analysis absent, not the pinned 8.2 artifact, canary silent, or an incident lost between the tool and the list |
+| `MTA_MISSING` / `MTA_PROVENANCE` / `CANARY_MISSING` / `INCIDENTS_NOT_CONSERVED` | analysis absent, not the pinned 8.3 artifact, canary silent, or an incident lost between the tool and the list |
 | `STRUCTURE_MISSING` / `ZERO_ENTRY_POINTS` | no admitted structural evidence, or nothing to verify parity against |
 | `PLANNER_NOT_ACTIVATED` / `PLANNER_PILOT_SEAL` | the activation gate (§9) |
 | `MISSING_DECISION` / `ADR_NOT_ACCEPTED` / `PLATFORM_UNKNOWN` | `decisions.yaml` incomplete or citing an unaccepted ADR |
@@ -365,7 +365,7 @@ a warm-up), decided-repairs, declared-reference, V17-3/4/5 checkpoint and
 brief cases.
 
 **The claim is narrower than "same inputs, same plan" end to end.** NOT RUN:
-the pinned MTA CLI 8.2 (the host's mta-cli is 7.3.0, not admissible; the
+the pinned MTA CLI 8.3 (the host's mta-cli is 7.3.0, not admissible; the
 pinned 8.2.1 exists locally only as linux/amd64 inside the ws-080 image, and
 under emulation on the arm64 workstation its Java provider did not start the
 analysis within 21 minutes -- the native run takes about a minute), so MTA
@@ -589,7 +589,7 @@ dest-init mints M1 ANALYZE always and M2 PLAN (child of M1) only under an activa
 
 | Asset | Disposition |
 |---|---|
-| Freeze, build receipt, JDK-model inventory, MTA 8.2 receipts, evidence bundle | **Kept**; bundle trimmed to source, structure, entry points, obligations, receipts |
+| Freeze, build receipt, JDK-model inventory, MTA 8.3 receipts, evidence bundle | **Kept**; bundle trimmed to source, structure, entry points, obligations, receipts |
 | Ownership map, four partition policies, capability DAG, transformation projection, resolution ledger | **Deleted** (`planner.ownership`, `planner.dag`, `planner.ledger`) |
 | Context probe, jQAssistant reconciliation | **Deleted** (`probe-spring-bindings`, `enrich-legacy-bytecode`) |
 | Platform API index | **Deleted** (no symbol projection on the compat path) |
@@ -651,7 +651,7 @@ second principal) is retired for new runs; its contract is Part B.
 | Specimen independence across all harness components (§2.1) | REQUIRED DESIGN; application-assumption removal and capability/invariance checks remain open. PetClinic completion followed by a new application is the live proof sequence; cross-application completion is not demonstrated by this requirement |
 | Freeze, build receipt, evidence bundle (environment-independent) | IMPLEMENTED; freeze run locally on a Spring fixture |
 | JDK-model extractor | IMPLEMENTED on the JDK compiler API; run inside the selftest on a Spring fixture without a classpath (annotation values from the syntax tree) |
-| MTA CLI 8.2 provenance, canary, incident conservation | IMPLEMENTED with negatives; `mta_cli` pinned to the 8.2 line, digest to be frozen from a measured receipt; not executed live |
+| MTA CLI 8.3 provenance, canary, incident conservation | IMPLEMENTED with negatives; `mta_cli` pinned to the 8.3 line, digest to be frozen from a measured receipt; not executed live |
 | Deterministic bootstrap (compat mapping) | IMPLEMENTED with an idempotence test on a fake legacy pom; not run on PetClinic |
 | Work list, order, measure, progress rule | IMPLEMENTED with unit and end-to-end tests; the compile slot is observed coverage, so an introduced unhandled checked exception vetoes acceptance from the compiler model, "still reported" is a line-free identity, and a checked-exception repair family (bound to the step that introduced it) continues in place; demonstrated on v8's own commits |
 | JDK diagnostics tool | IMPLEMENTED; run locally on the Spring fixture (18 errors, no classpath); `-Xmaxerrs 10000` does not complete coverage across sibling checked-exception sites |
@@ -668,7 +668,7 @@ second principal) is retired for new runs; its contract is Part B.
 
 Principal risks: the compat mapping's coverage on a real starter set (unmapped dependencies become loop work, which is correct but may be long); local minima where a step reduces the measure without being semantically right (tests and parity are in the measure, and tests are never writable); sequential-only execution; the surefire runner on a partially migrated tree; a composed objective is a larger single candidate than a per-unit card (bounded by the planned-unit grant); work no objective family names still reaches M4 only as parity (2026-09-28: the source's own override fragments use column names in JPQL, which Hibernate 7 rejects).
 
-Decisions still required: the MTA CLI 8.2 binary in the overlay with its checksum frozen before admission; the pilot seal (bound to source, baseline, receipt, board and expiry) after the acceptance and continuation defects are proven on the pinned Hermes; capture of the worker tool names and schemas per profile for K2. `decisions.yaml` (platform ADR-001, attempt threshold ADR-002 = 3) is in place.
+Decisions still required: the MTA CLI 8.3 binary in the overlay with its checksum frozen before admission; the pilot seal (bound to source, baseline, receipt, board and expiry) after the acceptance and continuation defects are proven on the pinned Hermes; capture of the worker tool names and schemas per profile for K2. `decisions.yaml` (platform ADR-001, attempt threshold ADR-002 = 3) is in place.
 
 ---
 
@@ -687,7 +687,7 @@ Architects bind design here. Implementers change the kernel and skills against a
 
 ### Primary references
 
-- [MTA 8.2 CLI documentation](https://docs.redhat.com/en/documentation/migration_toolkit_for_applications/8.2/html-single/using_the_migration_toolkit_for_applications_command-line_interface/index)
+- [MTA 8.3 CLI documentation](https://docs.redhat.com/en/documentation/migration_toolkit_for_applications/8.3/html-single/using_the_migration_toolkit_for_applications_command-line_interface/index)
 - [Hermes Kanban documentation](https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban)
 - [Hermes Kanban worker lanes](https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban-worker-lanes)
 - [JDK compiler API (`jdk.compiler` module)](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.compiler/module-summary.html)

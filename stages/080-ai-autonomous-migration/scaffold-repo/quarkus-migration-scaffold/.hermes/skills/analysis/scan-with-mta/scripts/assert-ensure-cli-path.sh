@@ -148,7 +148,7 @@ write_shebang "${MTA_CLI_HOME}/java-external-provider" 755
 write_shebang "${MTA_CLI_HOME}/rulesets/go/fips/tests/data/build/build.sh" 644
 CLI_MTA="$(ensure_cli)"
 [ "${CLI_MTA}" = "${MTA_CLI_HOME}/mta-cli" ] || {
-  echo "FAIL: MTA 8.2 tree with ruleset fixture was not accepted: $(printf %q "${CLI_MTA}")" >&2
+  echo "FAIL: MTA 8.3 tree with ruleset fixture was not accepted: $(printf %q "${CLI_MTA}")" >&2
   exit 1
 }
 

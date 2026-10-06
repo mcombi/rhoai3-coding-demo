@@ -1304,11 +1304,13 @@ Do not invoke dest `.hermes/checks/assert-agent-pin.py`; that tree is retired. O
 - Operator GO `E-20260823T111522Z` ratified Hermes v0.20.5 / 2026.8.19. Dest-init fail-closes unless overlay `hermes --version` matches `.hermes/pins.json`. Do not curl-install Hermes. Do not fall back to dest `.hermes/home/hermes-agent` (Architect `202501ZA` / `185531ZA` / `210214ZA`). Spec Kit is removed from Stage 080; planning is the deterministic planner under `.hermes/lib/planner/` (activation-gated via `pins.planner.activation`).
 - Do not treat dest-armed (a) as MATCH until dest `pins.json` and `hermes --version` agree. Do not mkdir empty `.hermes/kernel/` to work around a pin miss. Do not restore dest `.hermes/checks/`.
 
-## Stage 080 MTA receipt is kantra-fallback though overlay mta-cli is 8.2.1
+## Stage 080 MTA receipt is kantra-fallback though overlay mta-cli is present
 
 **Affected stage:** Stage 080 factory workspace (`app-migration` destfile, `development-tooling`)
 
-**Symptom:** `mta-cli version` in the overlay prints `version: 8.2.1` and `readlink -f $(command -v mta-cli)` is `/opt/mta-cli/mta-cli`, but `evidence/producers/mta.json` has `provenance: kantra-fallback`, `admissible: false`, `binary_realpath: /opt/kantra/kantra`, and harness admission blocks `MTA_PROVENANCE`. Analyzer stderr contains `mta-analyze-legacy: /opt/mta-cli/mta-cli present but unusable; falling through` and `kantra-assert-exec: 1 runnable files under /opt/mta-cli are not executable and could not be chmod'd (/opt/mta-cli/rulesets/go/fips/tests/data/build/build.sh)`.
+> **Version note (8.3 migration):** This defect was confirmed on MTA CLI 8.2.1. Its status under the 8.3.x CLI pin is unknown until a live analysis run is validated. See `BACKLOG.md` for the `check-cli-8.3` gate item.
+
+**Symptom:** `mta-cli version` in the overlay prints the expected version and `readlink -f $(command -v mta-cli)` is `/opt/mta-cli/mta-cli`, but `evidence/producers/mta.json` has `provenance: kantra-fallback`, `admissible: false`, `binary_realpath: /opt/kantra/kantra`, and harness admission blocks `MTA_PROVENANCE`. Analyzer stderr contains `mta-analyze-legacy: /opt/mta-cli/mta-cli present but unusable; falling through` and `kantra-assert-exec: 1 runnable files under /opt/mta-cli are not executable and could not be chmod'd (/opt/mta-cli/rulesets/go/fips/tests/data/build/build.sh)`.
 
 **Likely cause:** dest-init `kantra-assert-exec` treated every ELF/shebang under the install prefix as an analysis helper. MTA CLI 8.2.1 ships a non-executable `#!` test fixture under `rulesets/`. Overlay trees are `chown 10001:0`, so the dest uid cannot chmod that file. `ensure_cli` then accepted community kantra. This is a checker defect, not a missing overlay binary. Do not rebake the image for this. Do not hand-edit dest `evidence/` or `.hermes/pins.json`.
 

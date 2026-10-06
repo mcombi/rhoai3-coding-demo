@@ -3,7 +3,7 @@
 Use this extraction to keep MTA CLI content grounded in official Red Hat
 sources. When implementation needs exact command syntax, verify against
 `mta-cli --help` and `mta-cli analyze --help` on the installed version
-(product baseline: MTA 8.2).
+(product baseline: MTA 8.3).
 
 Live 8.2 CLI guide: analyzing Java applications is **Chapter 4** (was
 Chapter 3 in 8.1). Nested grounding for this bump:
@@ -21,7 +21,7 @@ matching source/target label. Rules **without** those labels are excluded.
 - **Silent in MTA 8.1 and 8.2** docs (Rule metadata chapter) — the caveat was
   dropped between 7.1 and 8.1; surrounding reserved-label / `--label-selector`
   material is otherwise unchanged.
-- **Confirmed on MTA 8.2 runs** (Track B, 2026-07-27): `--source` excluded
+- **Confirmed on MTA 8.2 runs (retained for historical traceability; re-verify on MTA 8.3)** (Track B, 2026-07-27): `--source` excluded
   source-labelless rules (including custom contract rules) and narrowed the set.
 
 **Demo / harness practice:** prefer `--target` only (from

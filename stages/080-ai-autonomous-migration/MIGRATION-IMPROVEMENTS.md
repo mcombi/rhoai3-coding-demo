@@ -123,7 +123,7 @@ post-request committed state read as FAIL instead of INCONCLUSIVE.
 
 | Milestone | What is demonstrated | Evidence level |
 |---|---|---|
-| Source understood | M1 structure producer reproduces on two clean copies of the frozen v28 source; all 12 v29 missing-oracle entry points derive and qualify captures (41 disabled / 103 enabled scenarios, hsqldb baseline); User create through the ADR-026 committed-state read-back | Fresh local producer run; MTA findings are recorded evidence, not a fresh MTA 8.2 execution (host has 7.3) |
+| Source understood | M1 structure producer reproduces on two clean copies of the frozen v28 source; all 12 v29 missing-oracle entry points derive and qualify captures (41 disabled / 103 enabled scenarios, hsqldb baseline); User create through the ADR-026 committed-state read-back | Fresh local producer run; MTA findings are recorded evidence, not a fresh MTA 8.3 execution (host has 7.3) |
 | Target structurally viable | Typed CDI exposure and URI translation qualified; servlet-redirect is the only edit the v28 tree needed to package | Recipe tests, package tests on the pinned platform |
 | Persistence and one HTTP path | Reference repository port: fresh-transaction read-back, delete dependencies, recursion/stub/no-op/duplicate negatives rejected, PostgreSQL 16; ADR-026 destination path qualified on PostgreSQL 16 (committed write on a fresh connection PASS; no-op, rollback, wrong value, uncommitted FAIL; unreadable INCONCLUSIVE; both modes) | Local containers, component level |
 | Application behavior preserved (Owner path) | v28 candidate 19 of 47 comparisons; rehearsal candidate (one patch per catalog repair, written from catalog text only) 47 of 47 across both modes (40 disabled, 7 enabled), 4 through ADR-025 equivalences | Manually prepared local rehearsal, not a migration output and not proof that workers reach it autonomously |
@@ -138,7 +138,7 @@ refused; that establishes the retrieval path, not that model looping is solved.
 - 118/118 non-container suites and 14/14 container suites exit 0, including the
   merged-path regression, the conflict-pair tests and the ADR-026 PostgreSQL suite.
 - Shell syntax clean for Stage 040/080 and shared scripts.
-- Planning repeatability 26 pass, 0 fail, 1 NOT-RUN (fresh MTA 8.2).
+- Planning repeatability 26 pass, 0 fail, 1 NOT-RUN (fresh MTA 8.3).
 - Typed-repair executor rebuilt to the pinned jar `66d1b6f4…6506ad`.
 - M-3: CONTROLS PASS; v28 candidate NOT EQUIVALENT (28 steps); rehearsal EQUIVALENT
   on the measured corpus.

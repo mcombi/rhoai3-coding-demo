@@ -718,7 +718,7 @@ curl -s https://$(oc get route coolstore-inventory-service -n coolstore-dev -o j
 
 ### Stage 050 — Developer Hub (rhdh component)
 
-The stage 050 `rhdh` component installs Red Hat Developer Hub and configures OIDC through the platform RHBK (realm `platform`) from the `identity` component of the same stage; MTA 8.2's built-in Hub OIDC provider federates to the same realm (`platform-sso` IdentityProvider).
+The stage 050 `rhdh` component installs Red Hat Developer Hub and configures OIDC through the platform RHBK (realm `platform`) from the `identity` component of the same stage; MTA 8.3's built-in Hub OIDC provider federates to the same realm (`platform-sso` IdentityProvider).
 
 The RHDH catalog location is runtime-derived from the Stage 050 Argo CD Application source. This avoids loading catalog entities from `main` when the demo is deployed from a validation branch or fork. Golden-path template Locations use that same `targetRevision` (stable branch). They must not be SHA-pinned blob URLs — those accumulate and flap `template:default/app-migration` 200/404.
 
