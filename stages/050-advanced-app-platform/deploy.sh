@@ -99,6 +99,74 @@ else
   log_warn "GITHUB_TOKEN not set — RHDH golden-path templates cannot publish repositories"
 fi
 
+# --- MTA Agents pre-flight: confirm and auto-patch operator channels ---
+# The Agent Sandbox Operator channel name is not guaranteed to be 'stable'.
+# This block queries the cluster for the real default channel and patches
+# the Subscription YAML in-place before Argo CD applies it, so the
+# channel is always correct without manual editing.
+log_step "MTA Agents pre-flight: operator channel verification"
+
+AGENT_SANDBOX_SUB="${REPO_ROOT}/gitops/stages/050-advanced-app-platform/base/mta/agent-sandbox-operator/subscription.yaml"
+AGENT_SANDBOX_CHANNEL_CURRENT="$(python3 -c "
+import sys, re
+content = open(sys.argv[1]).read()
+m = re.search(r'channel:\s*(\S+)', content)
+print(m.group(1) if m else '')
+" "${AGENT_SANDBOX_SUB}" 2>/dev/null || echo "")"
+
+AGENT_SANDBOX_CHANNEL_LIVE="$(oc get packagemanifests agent-sandbox-operator \
+  -n openshift-marketplace \
+  -o jsonpath='{.status.defaultChannel}' 2>/dev/null || echo "")"
+
+if [[ -z "${AGENT_SANDBOX_CHANNEL_LIVE}" ]]; then
+  log_warn "agent-sandbox-operator not found in marketplace — Agent Sandbox Operator may not be available on this cluster"
+  log_warn "MTA Agents (Developer Preview) will not function without it; continuing deploy"
+elif [[ "${AGENT_SANDBOX_CHANNEL_LIVE}" != "${AGENT_SANDBOX_CHANNEL_CURRENT}" ]]; then
+  log_info "Auto-patching Agent Sandbox Operator channel: '${AGENT_SANDBOX_CHANNEL_CURRENT}' -> '${AGENT_SANDBOX_CHANNEL_LIVE}'"
+  python3 - "${AGENT_SANDBOX_SUB}" "${AGENT_SANDBOX_CHANNEL_LIVE}" <<'PATCH_CHANNEL'
+import sys, re
+path, channel = sys.argv[1], sys.argv[2]
+content = open(path).read()
+# Replace only the channel: line (not TODO comments above it)
+patched = re.sub(r'^(\s*channel:\s*)\S+', r'\g<1>' + channel, content, flags=re.MULTILINE)
+open(path, 'w').write(patched)
+print(f"Patched {path}: channel -> {channel}")
+PATCH_CHANNEL
+  # Stage the change so git status stays clean after deploy
+  git -C "${REPO_ROOT}" add "${AGENT_SANDBOX_SUB}" 2>/dev/null || true
+else
+  log_info "Agent Sandbox Operator channel confirmed: ${AGENT_SANDBOX_CHANNEL_LIVE}"
+fi
+
+MTA_SUB="${REPO_ROOT}/gitops/stages/050-advanced-app-platform/base/mta/mta-operator/subscription.yaml"
+MTA_CHANNEL_CURRENT="$(python3 -c "
+import sys, re
+content = open(sys.argv[1]).read()
+m = re.search(r'channel:\s*(\S+)', content)
+print(m.group(1) if m else '')
+" "${MTA_SUB}" 2>/dev/null || echo "")"
+
+MTA_CHANNELS_LIVE="$(oc get packagemanifests mta-operator \
+  -n openshift-marketplace \
+  -o jsonpath='{.status.channels[*].name}' 2>/dev/null || echo "")"
+
+if [[ -z "${MTA_CHANNELS_LIVE}" ]]; then
+  log_warn "mta-operator not found in marketplace — cannot validate MTA channel"
+elif echo "${MTA_CHANNELS_LIVE}" | grep -qw "${MTA_CHANNEL_CURRENT}"; then
+  log_info "MTA Operator channel '${MTA_CHANNEL_CURRENT}' is available on this cluster"
+else
+  log_warn "MTA Operator channel '${MTA_CHANNEL_CURRENT}' NOT found on this cluster"
+  log_warn "Available MTA channels: ${MTA_CHANNELS_LIVE}"
+  MTA_DEFAULT_CHANNEL="$(oc get packagemanifests mta-operator \
+    -n openshift-marketplace \
+    -o jsonpath='{.status.defaultChannel}' 2>/dev/null || echo "")"
+  if [[ -n "${MTA_DEFAULT_CHANNEL}" ]]; then
+    log_warn "Default channel is '${MTA_DEFAULT_CHANNEL}'. Edit ${MTA_SUB} before continuing."
+  fi
+  log_error "Fix the MTA Operator channel before running apply_stage_app; exiting."
+  exit 1
+fi
+
 apply_stage_app "$STAGE_NAME"
 
 # --- Coolstore dev environment: seed build ---
@@ -256,7 +324,7 @@ log_info "  devspaces:   operator -> CheCluster -> workspaces -> MaaS keys"
 log_info "  pipelines:   Pipelines/TAS operators -> build namespace -> pipeline + triggers"
 log_info "  sonarqube:   db secret hook -> PostgreSQL -> SonarQube -> PostSync gate/token job"
 log_info "  rhdh:        operator -> config -> Backstage CR -> PostSync OIDC"
-log_info "  mta:         MTA operator -> Tackle -> platform-SSO hook"
+log_info "  mta:         Agent Sandbox Operator -> MTA operator -> Tackle -> platform-SSO hook -> MaaS Gateway (wave 28)"
 log_info "RHDH OIDC brokers through the identity component platform RHBK; PostSync jobs wait, so"
 log_info "ordering resolves within this one Application."
 echo ""
@@ -267,6 +335,9 @@ echo "  oc get checluster devspaces -n openshift-devspaces"
 echo "  oc get pods -n sonarqube"
 echo "  oc get pods -n rhdh"
 echo "  oc get tackle mta -n openshift-mta"
+echo "  oc get csv -n agent-sandbox-system              # Agent Sandbox Operator"
+echo "  oc get deployment agentic-controller -n openshift-mta  # MTA Agents controller"
+echo "  oc get gateways.konveyor.io -n openshift-mta   # MaaS LLM Gateways"
 echo ""
 log_info "After deploy:"
 echo "  oc get route -n rhdh                     # Developer Hub"
