@@ -107,6 +107,38 @@ check "Tackle CR exists" \
   "oc get tackle mta -n openshift-mta -o jsonpath='{.metadata.name}'" \
   "mta"
 
+log_step "MTA Agents (Developer Preview — MTA 8.3)"
+check "Agent Sandbox Operator installed" \
+  "oc get csv -n agent-sandbox-system -o jsonpath='{range .items[*]}{.metadata.name}{\" \"}{.status.phase}{\"\\n\"}{end}' 2>/dev/null | grep -c Succeeded || echo 0" \
+  "1"
+AGENTIC_READY=$(oc get deployment agentic-controller -n openshift-mta \
+  -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+if [[ "${AGENTIC_READY}" -ge 1 ]]; then
+    echo -e "${GREEN}[PASS]${NC} agentic-controller deployment is ready (${AGENTIC_READY} replica)"
+    VALIDATE_PASS=$((VALIDATE_PASS + 1))
+else
+    echo -e "${YELLOW}[WARN]${NC} agentic-controller not yet ready (Tackle agentic_enabled may still be reconciling)"
+    VALIDATE_WARN=$((VALIDATE_WARN + 1))
+fi
+GATEWAY_COUNT=$(oc get gateways.konveyor.io -n openshift-mta \
+  --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+if [[ "${GATEWAY_COUNT}" -ge 2 ]]; then
+    echo -e "${GREEN}[PASS]${NC} MTA Agent Gateway CRs present (${GATEWAY_COUNT} found)"
+    VALIDATE_PASS=$((VALIDATE_PASS + 1))
+else
+    echo -e "${YELLOW}[WARN]${NC} MTA Agent Gateway CRs not yet provisioned (expected ≥2, got ${GATEWAY_COUNT}; configure-mta-maas-gateway job may still be running)"
+    VALIDATE_WARN=$((VALIDATE_WARN + 1))
+fi
+MTA_MAAS_SECRET=$(oc get secret mta-maas-credentials -n openshift-mta \
+  -o jsonpath='{.metadata.name}' 2>/dev/null || echo "")
+if [[ "${MTA_MAAS_SECRET}" == "mta-maas-credentials" ]]; then
+    echo -e "${GREEN}[PASS]${NC} Secret mta-maas-credentials exists in openshift-mta"
+    VALIDATE_PASS=$((VALIDATE_PASS + 1))
+else
+    echo -e "${YELLOW}[WARN]${NC} Secret mta-maas-credentials not found (MaaS PostSync job may not have run yet)"
+    VALIDATE_WARN=$((VALIDATE_WARN + 1))
+fi
+
 log_step "Coolstore dev environment (coolstore component)"
 check "coolstore-inventory-service deployment ready" \
   "oc get deployment coolstore-inventory-service -n coolstore-dev -o jsonpath='{.status.availableReplicas}'" \

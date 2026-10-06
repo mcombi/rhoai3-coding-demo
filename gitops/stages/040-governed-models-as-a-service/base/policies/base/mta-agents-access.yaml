@@ -1,0 +1,79 @@
+# MaaS access for MTA Agents (MTA 8.3, Developer Preview).
+# The mta-maas-key-provisioner SA (openshift-mta) mints a single API key
+# used by the agentic-controller and the Gateway CRs it drives.
+# Rate limits are intentionally lower than the DevSpaces budget: agent runs
+# are discrete tasks, not persistent coding sessions; 2M/h per model gives
+# ~8 full agent workflow runs/h at typical agentic token usage.
+# Priority 120 — below personal subscriptions (150) and DevSpaces (100 default)
+# but above unauthenticated fallback.
+apiVersion: maas.opendatahub.io/v1alpha1
+kind: MaaSSubscription
+metadata:
+  name: mta-agents-access
+  namespace: models-as-a-service
+  labels:
+    app.kubernetes.io/name: mta-agents-access
+    app.kubernetes.io/component: maas-subscription
+    demo.rhoai.io/provider: governed-models
+    demo.rhoai.io/stage: "050"
+  annotations:
+    argocd.argoproj.io/sync-wave: "18"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  owner:
+    users:
+      - system:serviceaccount:openshift-mta:mta-maas-key-provisioner
+  modelRefs:
+    # Primary model for agentic analysis and code resolution.
+    # 262144 token context window; INT4 quantised — best throughput for
+    # multi-file agent tasks on the demo cluster GPUs.
+    - name: qwen3-8-27b-int4
+      namespace: models-as-a-service
+      tokenRateLimits:
+        - limit: 2000000
+          window: 1h
+    # Secondary model (larger context, FP16) for complex workflows that
+    # require the full 131072-token window.
+    - name: qwen3-6-27b
+      namespace: models-as-a-service
+      tokenRateLimits:
+        - limit: 2000000
+          window: 1h
+  priority: 120
+  tokenMetadata:
+    organizationId: rhoai3-coding-demo
+    costCenter: ai-platform
+    labels:
+      environment: demo
+      provider: governed-models
+      modelSet: mta-agents
+---
+apiVersion: maas.opendatahub.io/v1alpha1
+kind: MaaSAuthPolicy
+metadata:
+  name: mta-agents-access
+  namespace: models-as-a-service
+  labels:
+    app.kubernetes.io/name: mta-agents-access
+    app.kubernetes.io/component: maas-auth-policy
+    demo.rhoai.io/provider: governed-models
+    demo.rhoai.io/stage: "050"
+  annotations:
+    argocd.argoproj.io/sync-wave: "18"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  subjects:
+    users:
+      - system:serviceaccount:openshift-mta:mta-maas-key-provisioner
+  modelRefs:
+    - name: qwen3-8-27b-int4
+      namespace: models-as-a-service
+    - name: qwen3-6-27b
+      namespace: models-as-a-service
+  meteringMetadata:
+    organizationId: rhoai3-coding-demo
+    costCenter: ai-platform
+    labels:
+      environment: demo
+      provider: governed-models
+      modelSet: mta-agents

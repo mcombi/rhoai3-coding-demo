@@ -1,0 +1,10 @@
+# Agent Sandbox Operator group — all-namespaces installation so the
+# sandbox controller can manage workloads across any namespace.
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: agent-sandbox
+  namespace: agent-sandbox-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec: {}

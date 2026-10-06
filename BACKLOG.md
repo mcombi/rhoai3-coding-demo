@@ -4,6 +4,45 @@ Open limitations, unfinished work, and the evidence needed to understand them.
 Completed run narratives remain in Git history. Paths under `tmp/` are local
 evidence, excluded from Git.
 
+## MTA Agents with MaaS (branch feat/mta-agents-maas, 2026-10-06)
+
+MTA 8.3 Agents (Developer Preview, MTA-7422/7423) are enabled via
+`agentic_enabled: "true"` in the Tackle CR, backed by MaaS models through
+`konveyor.io/v1alpha1` Gateway CRs.
+
+**Support scope:** Developer Preview. Not supported with Red Hat production SLAs.
+Not for production or business-critical workloads.
+
+**Pre-merge cluster checklist (not validated — no live cluster at authoring time):**
+
+- [ ] Confirm Agent Sandbox Operator channel name before merge:
+  `oc get packagemanifests agent-sandbox-operator -n openshift-marketplace -o jsonpath='{.status.defaultChannel}'`
+  Update `gitops/stages/050-advanced-app-platform/base/mta/agent-sandbox-operator/subscription.yaml`
+  channel field from `stable` to the confirmed value.
+- [ ] Confirm `stable-v8.3` MTA Operator channel is available:
+  `oc get packagemanifests mta-operator -n openshift-marketplace -o jsonpath='{.status.channels[*].name}'`
+- [ ] MTA 8.2 → 8.3 upgrade is irreversible once the 8.3 InstallPlan is approved.
+  Validate full stage 050 + stage 080 flow on a non-production cluster before
+  merging to main.
+- [ ] Run `./stages/050-advanced-app-platform/validate.sh` — all MTA Agents checks
+  should PASS (agentic-controller ready, ≥2 Gateway CRs, mta-maas-credentials Secret).
+- [ ] Verify Gateway CR readiness:
+  `oc get gateways.konveyor.io -n openshift-mta`
+- [ ] Run a single-agent run in the MTA UI (Administration → Agentic → Agent runs)
+  using the `maas-qwen3-8b-int4` Gateway and the default `migration-execute-agent`.
+- [ ] Check MaaS token accounting: confirm gateway 429 behaviour at the 2M/h limit.
+  Adjust `tokenRateLimits` in `mta-agents-access.yaml` if agent workflow patterns
+  require a higher budget.
+- [ ] Confirm `agentic_steer_enabled: "true"` does not regress stage 080 runs
+  (steering mode adds approval prompts that could block autonomous harness).
+
+**Re-enable checklist (when MTA Agents reaches GA):**
+
+- [ ] Remove Developer Preview warning from Tackle CR comment and BACKLOG.
+- [ ] Consider enabling `kai_llm_proxy_enabled` + `kai_solution_server_enabled` for
+  the Solution Server (requires RWO PV and operator rebuild; see mta-lightspeed skill).
+- [ ] Update mta-release-notes skill to MTA 8.3 baseline.
+
 ## Migration reliability package M-1..M-7 (2026-09-30, unpublished)
 
 Branch `feat/migration-reliability-m1-m7` (base `next/after-v28` `26bc9c2b`); status per ID in

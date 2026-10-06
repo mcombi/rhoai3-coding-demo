@@ -1,0 +1,345 @@
+# PostSync Job: provision a MaaS API key for MTA Agents and deploy
+# konveyor.io/v1alpha1 Gateway CRs backed by that key.
+#
+# Flow:
+#   1. Discover the live MaaS hostname from the maas-default-gateway.
+#   2. Mint (or revalidate an existing) MaaS API key using the
+#      mta-maas-key-provisioner SA token — authenticated by the
+#      MaaSSubscription / MaaSAuthPolicy in Stage 040 (mta-agents-access).
+#   3. Write the key as Secret mta-maas-credentials in openshift-mta.
+#   4. Wait for the Gateway CRD (konveyor.io/v1alpha1) to become available
+#      — the MTA 8.3 Operator registers it when agentic_enabled is true.
+#   5. Apply two Gateway CRs (qwen3-8-27b-int4, qwen3-6-27b) pointing to
+#      the live MaaS endpoint. The endpoint uses provider openai with the
+#      full MaaS path (hostname + /models-as-a-service/<model>) so that
+#      the agentic-controller appends /v1/chat/completions correctly.
+#
+# RBAC summary:
+#   - SA mta-maas-key-provisioner in openshift-mta
+#   - Role in openshift-mta: manage Secrets, apply/get gateways.konveyor.io
+#   - Role in openshift-ingress: read gateways.gateway.networking.k8s.io
+#     (to retrieve the live MaaS hostname)
+#
+# Sync wave 28: runs after configure-mta-platform-sso (wave 25) so the
+# hub restart is complete before Gateway CRs are applied.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mta-maas-key-provisioner
+  namespace: openshift-mta
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "28"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mta-maas-key-provisioner
+  namespace: openshift-mta
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "28"
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "patch", "update"]
+  # konveyor.io/v1alpha1 Gateway CRs — registered by MTA 8.3 Operator
+  # when agentic_enabled is true. SkipDryRunOnMissingResource is set on
+  # the Job (not RBAC), so this rule is applied optimistically.
+  - apiGroups: ["konveyor.io"]
+    resources: ["gateways"]
+    verbs: ["get", "create", "patch", "apply"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mta-maas-key-provisioner
+  namespace: openshift-mta
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "28"
+subjects:
+  - kind: ServiceAccount
+    name: mta-maas-key-provisioner
+    namespace: openshift-mta
+roleRef:
+  kind: Role
+  name: mta-maas-key-provisioner
+  apiGroup: rbac.authorization.k8s.io
+---
+# Read the MaaS Gateway in openshift-ingress to extract the live hostname.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mta-maas-key-provisioner-gateway-reader
+  namespace: openshift-ingress
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "28"
+rules:
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gateways"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mta-maas-key-provisioner-gateway-reader
+  namespace: openshift-ingress
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "28"
+subjects:
+  - kind: ServiceAccount
+    name: mta-maas-key-provisioner
+    namespace: openshift-mta
+roleRef:
+  kind: Role
+  name: mta-maas-key-provisioner-gateway-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-configure-mta-maas-gateway
+  namespace: openshift-mta
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "28"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  backoffLimit: 4
+  activeDeadlineSeconds: 1800
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: mta-maas-key-provisioner
+      containers:
+        - name: configure
+          image: registry.redhat.io/openshift4/ose-cli@sha256:69762925e16053d77685ff3a08b3b45dd2bfa5d68277851bc6969b368bbd0cb9
+          command:
+            - /bin/bash
+            - -ceu
+            - |
+              set -euo pipefail
+
+              SECRET_NAME="mta-maas-credentials"
+              SECRET_NAMESPACE="openshift-mta"
+              SUBSCRIPTION="mta-agents-access"
+              SA_PRINCIPAL="system:serviceaccount:openshift-mta:mta-maas-key-provisioner"
+              SA_TOKEN="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+              SECRET_FILE="$(mktemp)"
+              trap 'rm -f "${SECRET_FILE}"' EXIT
+              chmod 600 "${SECRET_FILE}"
+
+              # --- 1. Discover the live MaaS hostname ---
+              MAAS_HOST=""
+              for i in $(seq 1 30); do
+                MAAS_HOST="$(oc get gateway maas-default-gateway -n openshift-ingress \
+                  -o jsonpath='{.spec.listeners[0].hostname}' 2>/dev/null || true)"
+                if [ -n "${MAAS_HOST}" ] && ! echo "${MAAS_HOST}" | grep -q "placeholder"; then
+                  break
+                fi
+                echo "Waiting for MaaS Gateway hostname... (${i}/30)"
+                sleep 10
+              done
+              if [ -z "${MAAS_HOST}" ] || echo "${MAAS_HOST}" | grep -q "placeholder"; then
+                echo "ERROR: MaaS Gateway hostname is not ready after 5 minutes"
+                exit 1
+              fi
+              MAAS_BASE_URL="https://${MAAS_HOST}"
+              echo "MaaS base URL: ${MAAS_BASE_URL}"
+
+              # --- 2. Validate an existing key or mint a new one ---
+              secret_value() {
+                local key="$1"
+                oc get secret "${SECRET_NAME}" -n "${SECRET_NAMESPACE}" \
+                  -o "jsonpath={.data.${key}}" 2>/dev/null | base64 -d 2>/dev/null || true
+              }
+
+              validate_key() {
+                local key="$1"
+                local payload result
+                payload="$(python3 -c 'import json,sys; print(json.dumps({"key": sys.argv[1]}))' "${key}")"
+                result="$(curl -sk -X POST \
+                  -H "Content-Type: application/json" \
+                  -d "${payload}" \
+                  "https://maas-api.redhat-ods-applications.svc.cluster.local:8443/internal/v1/api-keys/validate" \
+                  | python3 -c 'import json,sys; print(json.load(sys.stdin).get("subscription",""))' 2>/dev/null || true)"
+                echo "${result}"
+              }
+
+              create_key() {
+                local name="$1"
+                local response key key_id expires_at
+                response="$(mktemp)"
+                curl -sk -X POST \
+                  -H "Authorization: Bearer ${SA_TOKEN}" \
+                  -H "Content-Type: application/json" \
+                  -d "{\"name\":\"${name}\",\"subscription\":\"${SUBSCRIPTION}\"}" \
+                  "${MAAS_BASE_URL}/maas-api/v1/api-keys" > "${response}"
+                key="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("key",""))' "${response}" 2>/dev/null || true)"
+                key_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("id",""))' "${response}" 2>/dev/null || true)"
+                expires_at="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("expiresAt",""))' "${response}" 2>/dev/null || true)"
+                rm -f "${response}"
+                if [ -z "${key}" ] || ! echo "${key}" | grep -q '^sk-oai-'; then
+                  echo "ERROR: MaaS API did not return a valid key for ${name}"
+                  exit 1
+                fi
+                printf '%s\n%s\n%s\n' "${key}" "${key_id}" "${expires_at}"
+              }
+
+              revoke_key() {
+                local key_id="$1"
+                local http_code
+                http_code="$(curl -sk --retry 3 --retry-delay 3 -o /dev/null -w '%{http_code}' \
+                  -X DELETE \
+                  -H "Authorization: Bearer ${SA_TOKEN}" \
+                  "${MAAS_BASE_URL}/maas-api/v1/api-keys/${key_id}")"
+                if [ "${http_code}" -ge 200 ] && [ "${http_code}" -lt 300 ]; then
+                  echo "Revoked key ${key_id}"
+                else
+                  echo "WARNING: failed to revoke key ${key_id} (HTTP ${http_code})"
+                fi
+              }
+
+              CURRENT_KEY="$(secret_value "api-key")"
+              CURRENT_KEY_ID="$(secret_value "api-key-id")"
+              CURRENT_SUB=""
+              if [ -n "${CURRENT_KEY}" ]; then
+                CURRENT_SUB="$(validate_key "${CURRENT_KEY}")"
+              fi
+
+              if [ "${CURRENT_SUB}" = "${SUBSCRIPTION}" ]; then
+                API_KEY="${CURRENT_KEY}"
+                API_KEY_ID="${CURRENT_KEY_ID}"
+                echo "Existing MaaS API key is valid for subscription ${SUBSCRIPTION}"
+              else
+                if [ -n "${CURRENT_KEY_ID}" ]; then
+                  revoke_key "${CURRENT_KEY_ID}"
+                fi
+                KEY_NAME="mta-agents-access"
+                mapfile -t created < <(create_key "${KEY_NAME}")
+                API_KEY="${created[0]}"
+                API_KEY_ID="${created[1]}"
+                API_KEY_EXPIRES_AT="${created[2]:-}"
+                echo "Provisioned new MaaS API key for subscription ${SUBSCRIPTION}"
+
+                # Revoke any orphaned keys with the same name owned by this SA
+                orphan_response="$(curl -sk --retry 3 --retry-delay 3 -X POST \
+                  -H "Authorization: Bearer ${SA_TOKEN}" \
+                  -H "Content-Type: application/json" \
+                  -d "{\"name\":\"${KEY_NAME}\"}" \
+                  "${MAAS_BASE_URL}/maas-api/v1/api-keys/search" 2>/dev/null || echo "[]")"
+                orphan_ids="$(echo "${orphan_response}" | python3 -c \
+                  'import json,sys; d=json.load(sys.stdin).get("data",[]); [print(e["id"]) for e in d if e.get("name")==sys.argv[1] and e.get("username")==sys.argv[2] and e.get("status")=="active" and e.get("id","")!=sys.argv[3]]' \
+                  "${KEY_NAME}" "${SA_PRINCIPAL}" "${API_KEY_ID}" 2>/dev/null || true)"
+                if [ -n "${orphan_ids}" ]; then
+                  while IFS= read -r oid; do
+                    [ -z "${oid}" ] && continue
+                    revoke_key "${oid}"
+                  done <<< "${orphan_ids}"
+                fi
+              fi
+
+              # --- 3. Write the credential Secret in openshift-mta ---
+              {
+                printf 'api-key=%s\n' "${API_KEY}"
+                printf 'api-key-id=%s\n' "${API_KEY_ID}"
+                printf 'maas-base-url=%s\n' "${MAAS_BASE_URL}"
+                printf 'subscription=%s\n' "${SUBSCRIPTION}"
+              } > "${SECRET_FILE}"
+
+              oc create secret generic "${SECRET_NAME}" \
+                -n "${SECRET_NAMESPACE}" \
+                --from-env-file="${SECRET_FILE}" \
+                --dry-run=client -o yaml | oc apply -f -
+              echo "Secret ${SECRET_NAMESPACE}/${SECRET_NAME} is ready"
+
+              # --- 4. Wait for konveyor.io/v1alpha1 Gateway CRD ---
+              # The MTA 8.3 Operator registers this CRD after agentic_enabled
+              # is set to true. The agentic-controller Deployment follows.
+              echo "Waiting for gateways.konveyor.io CRD..."
+              for i in $(seq 1 60); do
+                if oc get crd gateways.konveyor.io &>/dev/null; then
+                  echo "gateways.konveyor.io CRD is available"
+                  break
+                fi
+                echo "CRD not yet available... (${i}/60)"
+                sleep 10
+              done
+              if ! oc get crd gateways.konveyor.io &>/dev/null; then
+                echo "ERROR: gateways.konveyor.io CRD not available after 10 minutes"
+                echo "Ensure agentic_enabled: 'true' in the Tackle CR and MTA Operator 8.3 is installed"
+                exit 1
+              fi
+
+              # --- 5. Apply Gateway CRs ---
+              # provider: openai tells the agentic-controller to use the OpenAI
+              # API protocol. endpoint is the base URL without /v1; the controller
+              # appends /v1/chat/completions (same convention as api.openai.com).
+              # contextWindow matches the --max-model-len set in the serving stack.
+
+              apply_gateway() {
+                local name="$1"
+                local model="$2"
+                local context_window="$3"
+                local endpoint="${MAAS_BASE_URL}/models-as-a-service/${model}"
+
+                python3 - "${name}" "${model}" "${context_window}" "${endpoint}" "${API_KEY_ID}" <<'GWEOF' | \
+                  oc apply --server-side --force-conflicts \
+                    --field-manager=mta-maas-key-provisioner -f -
+              import json, sys
+              name, model, ctx, endpoint, key_id = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4], sys.argv[5]
+              gw = {
+                  "apiVersion": "konveyor.io/v1alpha1",
+                  "kind": "Gateway",
+                  "metadata": {
+                      "name": name,
+                      "namespace": "openshift-mta",
+                      "labels": {
+                          "app.kubernetes.io/name": name,
+                          "app.kubernetes.io/component": "llm-gateway",
+                          "app.kubernetes.io/managed-by": "mta-maas-key-provisioner",
+                          "demo.rhoai.io/provider": "governed-models",
+                          "demo.rhoai.io/stage": "050",
+                      },
+                      "annotations": {
+                          "demo.rhoai.io/maas-api-key-id": key_id,
+                      },
+                  },
+                  "spec": {
+                      "provider": "openai",
+                      "endpoint": endpoint,
+                      "credentialRef": {
+                          "secretName": "mta-maas-credentials",
+                          "key": "api-key",
+                      },
+                      "model": {
+                          "name": model,
+                          "contextWindow": ctx,
+                          "tier": "standard",
+                      },
+                  },
+              }
+              json.dump(gw, sys.stdout)
+              GWEOF
+                echo "Gateway ${name} applied (endpoint: ${endpoint})"
+              }
+
+              # qwen3-8-27b-int4: 262144-token context (--max-model-len=262144)
+              apply_gateway "maas-qwen3-8b-int4" "qwen3-8-27b-int4" 262144
+              # qwen3-6-27b: 131072-token context (--max-model-len=131072)
+              apply_gateway "maas-qwen3-6-27b" "qwen3-6-27b" 131072
+
+              echo ""
+              echo "=== MTA MaaS Gateway configuration complete ==="
+              echo "Gateway CRs: maas-qwen3-8b-int4, maas-qwen3-6-27b"
+              echo "Verify: oc get gateways.konveyor.io -n openshift-mta"
