@@ -15,12 +15,13 @@ Not for production or business-critical workloads.
 
 **Pre-merge cluster checklist (not validated — no live cluster at authoring time):**
 
-- [ ] Confirm Agent Sandbox Operator channel name before merge:
-  `oc get packagemanifests agent-sandbox-operator -n openshift-marketplace -o jsonpath='{.status.defaultChannel}'`
-  Update `gitops/stages/050-advanced-app-platform/base/mta/agent-sandbox-operator/subscription.yaml`
-  channel field from `stable` to the confirmed value.
-- [ ] Confirm `stable-v8.3` MTA Operator channel is available:
-  `oc get packagemanifests mta-operator -n openshift-marketplace -o jsonpath='{.status.channels[*].name}'`
+- [ ] Run `./stages/050-advanced-app-platform/deploy.sh` — it automatically:
+  - Queries the cluster for the Agent Sandbox Operator default channel and
+    patches `agent-sandbox-operator/subscription.yaml` if the channel differs
+    from `stable` (the placeholder committed here).
+  - Validates that `stable-v8.3` is a known MTA Operator channel; exits with
+    an error if it is not, listing available channels so you can correct it.
+  Commit any channel patches the script makes before opening the PR.
 - [ ] MTA 8.2 → 8.3 upgrade is irreversible once the 8.3 InstallPlan is approved.
   Validate full stage 050 + stage 080 flow on a non-production cluster before
   merging to main.
